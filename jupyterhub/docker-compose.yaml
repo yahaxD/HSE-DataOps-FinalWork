@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  notebook-hub:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - notebook-hub_data:/srv/notebook-hub
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  notebook-hub_data:
+networks:
+  default:
+    name: observability-net
+    external: true

@@ -1,0 +1,78 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - data-lake_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    env_file: .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:latest
+    env_file: .env
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing local/data-lake-bucket;
+      exit 0;
+      "
+    restart: "no"
+
+  data-lake:
+    image: treeverse/data-lake:1.25.0
+    env_file: .env
+    ports:
+      - "8001:8000"
+    environment:
+      LAKEFS_BLOCKSTORE_TYPE: ${LAKEFS_BLOCKSTORE_TYPE}
+      LAKEFS_BLOCKSTORE_S3_FORCE_PATH_STYLE: ${LAKEFS_BLOCKSTORE_S3_FORCE_PATH_STYLE}
+      LAKEFS_BLOCKSTORE_S3_ENDPOINT: ${LAKEFS_BLOCKSTORE_S3_ENDPOINT}
+      LAKEFS_BLOCKSTORE_S3_CREDENTIALS_ACCESS_KEY_ID: ${LAKEFS_BLOCKSTORE_S3_CREDENTIALS_ACCESS_KEY_ID}
+      LAKEFS_BLOCKSTORE_S3_CREDENTIALS_SECRET_ACCESS_KEY: ${LAKEFS_BLOCKSTORE_S3_CREDENTIALS_SECRET_ACCESS_KEY}
+      LAKEFS_DATABASE_TYPE: ${LAKEFS_DATABASE_TYPE}
+      LAKEFS_DATABASE_POSTGRES_CONNECTION_STRING: ${LAKEFS_DATABASE_POSTGRES_CONNECTION_STRING}
+      LAKEFS_AUTH_ENCRYPT_SECRET_KEY: ${LAKEFS_AUTH_ENCRYPT_SECRET_KEY}
+      LAKEFS_INSTALLATION_USER_NAME: ${LAKEFS_INSTALLATION_USER_NAME}
+      LAKEFS_INSTALLATION_ACCESS_KEY_ID: ${LAKEFS_INSTALLATION_ACCESS_KEY_ID}
+      LAKEFS_INSTALLATION_SECRET_ACCESS_KEY: ${LAKEFS_INSTALLATION_SECRET_ACCESS_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+volumes:
+  data-lake_postgres_data:
+  minio_data:
+networks:
+  default:
+    name: observability-net
+    external: true

@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14
+    container_name: mlflow-postgres
+    environment:
+      POSTGRES_USER: ${MLFLOW_DB_USER}
+      POSTGRES_PASSWORD: ${MLFLOW_DB_PASSWORD}
+      POSTGRES_DB: ${MLFLOW_DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mlflow-network
+
+  mlflow:
+    build: .
+    container_name: mlflow-server
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_DB_USER: ${MLFLOW_DB_USER}
+      MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD}
+      MLFLOW_DB_NAME: ${MLFLOW_DB_NAME}
+    volumes:
+      - ./artifacts:/mlflow/artifacts
+    depends_on:
+      - postgres
+    networks:
+      - mlflow-network
+
+volumes:
+  postgres_data:
+
+networks:
+  mlflow-network:
